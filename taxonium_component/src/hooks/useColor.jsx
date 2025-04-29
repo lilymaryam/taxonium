@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import scale from "scale-color-perceptual";
 import { scaleLinear } from "d3-scale";
+import { isPangoLineage, generatePangoLineageColor } from "../utils/lineageUtils";
 
 let rgb_cache = {};
 
@@ -15,9 +16,26 @@ const useColor = (config, colorMapping, colorByField) => {
     }
     return scales;
   }, [config.colorRamps, colorByField]);
-
+  
   const toRGB_uncached = useCallback(
     (string) => {
+      if (string === null || string === undefined) {
+        return [150, 150, 150];
+      }
+
+      // Use hierarchical coloring for all string values with potential dot notation
+      if (typeof string === 'string' && /^[A-Za-z]/.test(string)) {
+        return generatePangoLineageColor(string);
+      }
+
+      // Special case for boolean values
+      if (string === true) {
+        return [0, 180, 0];
+      }
+      if (string === false) {
+        return [180, 0, 0];
+      }
+
       if (config.colorRamps && config.colorRamps[colorByField]) {
         const value = parseFloat(string);
         const output = colorScales.colorRamp(value);
@@ -142,6 +160,12 @@ const useColor = (config, colorMapping, colorByField) => {
 
   const toRGB = useCallback(
     (string) => {
+      // Always use hierarchical coloring for all lineage names
+      if (string && typeof string === 'string') {
+        return generatePangoLineageColor(string);
+      }
+      
+      // For other values, use the cache
       if (rgb_cache[string] && !colorMapping[string]) {
         return rgb_cache[string];
       } else {

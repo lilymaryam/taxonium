@@ -6,16 +6,11 @@ import { BsBoxArrowInUpRight, BsQuestionCircle } from "react-icons/bs";
 import { MdArrowForward, MdArrowDownward } from "react-icons/md";
 import ReactTooltip from "react-tooltip";
 import prettifyName from "../utils/prettifyName";
-
 import { FaSearch, FaShare } from "react-icons/fa";
-
 import { Select } from "./Basic";
 import ListOutputModal from "./ListOutputModal";
-
-import { useState, useMemo, useEffect } from "react";
-
+import { useState, useMemo, useEffect, useCallback } from "react";
 import classNames from "classnames";
-
 import SearchDisplayToggle from "./SearchDisplayToggle";
 
 const prettify_x_types = { x_dist: "Distance", x_time: "Time" };
@@ -69,7 +64,7 @@ function SearchPanel({
     } else {
       return null;
     }
-  }, [selectedDetails.nodeDetails]);
+  }, [selectedDetails.nodeDetails, perNodeFunctions]);
 
   const [listOutputModalOpen, setListOutputModalOpen] = useState(false);
 

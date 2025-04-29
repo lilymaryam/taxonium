@@ -20,6 +20,7 @@ import { useCallback } from "react";
 import getDefaultQuery from "./utils/getDefaultQuery";
 import ReactTooltip from "react-tooltip";
 import { Toaster } from "react-hot-toast";
+import LineageTools from "./components/LineageTools";
 
 const default_query = getDefaultQuery();
 
@@ -75,6 +76,74 @@ function Taxonium({
     jbrowseRef,
     mouseDownIsMinimap,
   });
+
+  // Add state for lineage sidebar visibility
+  const [lineageSidebarOpen, setLineageSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Add a state for the selected lineage
+  const [selectedLineage, setSelectedLineage] = useState(null);
+  
+  // Create stable references to view data to prevent unnecessary rerendering
+  const [lineageData, setLineageData] = useState([]);
+  
+  // Update lineage data when view.keyStuff changes, directly pass data
+  useEffect(() => {
+    if (view && view.keyStuff) {
+      setLineageData(view.keyStuff);
+    }
+  }, [view?.keyStuff]);
+
+  // Function to handle lineage selection
+  const handleLineageSelect = (lineage) => {
+    setSelectedLineage(lineage);
+    
+    // Store the selected lineage for filtering all nodes
+    if (view) {
+      // Store the selected lineage for display highlighting and filtering
+      view.hoveredKey = lineage;
+      
+      // Add a new property to track lineage for node filtering
+      view.currentFilteredLineage = lineage;
+      
+      // Call setHoveredKey if available to ensure UI updates
+      if (view.setHoveredKey) {
+        view.setHoveredKey(lineage);
+      }
+      
+      // Force a view update to ensure nodes are filtered
+      if (view.viewState && view.viewState.target) {
+        // Trigger a tiny view change to force redraw
+        const currentTarget = [...view.viewState.target];
+        view.viewState = {
+          ...view.viewState,
+          target: currentTarget
+        };
+      }
+    }
+  };
+
+  // Initialize view properties to avoid undefined errors
+  useEffect(() => {
+    if (view) {
+      // Initialize keyStuff as empty array if not present
+      if (!view.keyStuff) {
+        view.keyStuff = [];
+      }
+      
+      // Initialize hoveredKey if not present
+      if (view.hoveredKey === undefined) {
+        view.hoveredKey = null;
+      }
+      
+      // Ensure setHoveredKey exists
+      if (!view.setHoveredKey) {
+        view.setHoveredKey = (newKey) => {
+          setSelectedLineage(newKey);
+        };
+      }
+    }
+  }, [view, setSelectedLineage]);
 
   const backend = useBackend(
     backendUrl ? backendUrl : query.backend,
@@ -148,7 +217,13 @@ function Taxonium({
     settings,
   });
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const toggleLineageSidebar = () => {
+    setLineageSidebarOpen(!lineageSidebarOpen);
+    setTimeout(() => {
+      window.dispatchEvent(new Event("resize"));
+    }, 100);
+  };
+
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
     setTimeout(() => {
@@ -157,6 +232,15 @@ function Taxonium({
   };
 
   const treenomeState = useTreenomeState(data, deckRef, view, settings);
+
+  const isPangoLineageField = useMemo(() => {
+    return (
+      colorBy.colorByField === "meta_pangolin_lineage" ||
+      (typeof colorBy.colorByField === "string" && 
+       (colorBy.colorByField.toLowerCase().includes("pango") || 
+        colorBy.colorByField.toLowerCase().includes("lineage")))
+    );
+  }, [colorBy.colorByField]);
 
   return (
     <div className="w-full h-full flex">
@@ -169,79 +253,108 @@ function Taxonium({
         textColor="#000"
         effect="solid"
       />
-      <div className="flex-grow overflow-hidden flex flex-col md:flex-row">
-        <div
-          className={
-            sidebarOpen
-              ? "h-1/2 md:h-full w-full 2xl:w-3/4 md:flex-grow" +
-                (settings.treenomeEnabled ? " md:w-3/4" : " md:w-2/3")
-              : "md:col-span-12 h-5/6 md:h-full w-full"
-          }
-        >
-          <Deck
-            statusMessage={backend.statusMessage}
-            data={data}
-            search={search}
-            view={view}
-            colorHook={colorHook}
-            colorBy={colorBy}
-            config={config}
-            ariaHideApp={false} // sadly with or without this the app is not suitable for screen readers
-            hoverDetails={hoverDetails}
-            selectedDetails={selectedDetails}
-            xType={xType}
-            settings={settings}
-            setDeckSize={setDeckSize}
-            deckSize={deckSize}
-            isCurrentlyOutsideBounds={isCurrentlyOutsideBounds}
-            treenomeState={treenomeState}
-            deckRef={deckRef}
-            mouseDownIsMinimap={mouseDownIsMinimap}
-            setMouseDownIsMinimap={setMouseDownIsMinimap}
-            jbrowseRef={jbrowseRef}
-            setAdditionalColorMapping={setAdditionalColorMapping}
-          />
-        </div>
+      <div className="flex-grow overflow-hidden flex flex-row">
+        <LineageTools
+          keyStuff={lineageData.length > 0 ? lineageData : view?.keyStuff || []}
+          colorHook={colorHook}
+          colorByField={colorBy.colorByField || ''}
+          onCategorySelect={handleLineageSelect}
+          selectedCategory={selectedLineage}
+          isPangoLineageField={isPangoLineageField}
+          toggleSidebar={toggleLineageSidebar}
+          isVisible={lineageSidebarOpen}
+          data={data} 
+          xType={view?.xType || 'x_dist'}
+        />
 
-        <div
-          className={
-            sidebarOpen
-              ? "flex-grow min-h-0 h-1/2 md:h-full 2xl:w-1/4 bg-white shadow-xl border-t md:border-0 overflow-y-auto md:overflow-hidden" +
-                (settings.treenomeEnabled ? " md:w-1/4" : " md:w-1/3")
-              : "bg-white shadow-xl"
-          }
-        >
-          {!sidebarOpen && (
-            <button onClick={toggleSidebar}>
-              <br />
-              {window.innerWidth > 768 ? (
-                <MdArrowBack className="mx-auto w-5 h-5 sidebar-toggle" />
-              ) : (
-                <MdArrowUpward className="mx-auto w-5 h-5 sidebar-toggle" />
-              )}
-            </button>
-          )}
+        <div className="flex-grow flex flex-col md:flex-row overflow-hidden">
+          <div
+            className={`
+              h-1/2 md:h-full w-full md:flex-grow
+              ${lineageSidebarOpen ? 'md:pl-0' : 'md:pl-0'}
+              ${sidebarOpen 
+                ? (settings.treenomeEnabled ? "md:w-3/4 2xl:w-3/4" : "md:w-2/3") 
+                : "md:w-full"
+              }
+            `}
+          >
+            {!lineageSidebarOpen && (
+              <button 
+                onClick={toggleLineageSidebar}
+                className="absolute z-10 left-0 top-1/2 transform -translate-y-1/2 bg-white rounded-r py-2 px-1 shadow-md border border-l-0"
+                title="Show Lineage Tools"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            )}
 
-          {sidebarOpen && (
-            <SearchPanel
-              className="flex-grow min-h-0 h-full bg-white shadow-xl border-t md:border-0 overflow-y-auto md:overflow-hidden"
-              backend={backend}
+            <Deck
+              statusMessage={backend.statusMessage}
+              data={data}
               search={search}
-              colorBy={colorBy}
+              view={view}
               colorHook={colorHook}
+              colorBy={colorBy}
               config={config}
+              ariaHideApp={false}
+              hoverDetails={hoverDetails}
               selectedDetails={selectedDetails}
               xType={xType}
-              setxType={setxType}
               settings={settings}
+              setDeckSize={setDeckSize}
+              deckSize={deckSize}
+              isCurrentlyOutsideBounds={isCurrentlyOutsideBounds}
               treenomeState={treenomeState}
-              view={view}
-              overlayContent={overlayContent}
-              setAboutEnabled={setAboutEnabled}
-              perNodeFunctions={perNodeFunctions}
-              toggleSidebar={toggleSidebar}
+              deckRef={deckRef}
+              mouseDownIsMinimap={mouseDownIsMinimap}
+              setMouseDownIsMinimap={setMouseDownIsMinimap}
+              jbrowseRef={jbrowseRef}
+              setAdditionalColorMapping={setAdditionalColorMapping}
             />
-          )}
+          </div>
+
+          <div
+            className={
+              sidebarOpen
+                ? "flex-grow min-h-0 h-1/2 md:h-full 2xl:w-1/4 bg-white shadow-xl border-t md:border-0 overflow-y-auto md:overflow-hidden" +
+                  (settings.treenomeEnabled ? " md:w-1/4" : " md:w-1/3")
+                : "bg-white shadow-xl"
+            }
+          >
+            {!sidebarOpen && (
+              <button onClick={toggleSidebar}>
+                <br />
+                {window.innerWidth > 768 ? (
+                  <MdArrowBack className="mx-auto w-5 h-5 sidebar-toggle" />
+                ) : (
+                  <MdArrowUpward className="mx-auto w-5 h-5 sidebar-toggle" />
+                )}
+              </button>
+            )}
+
+            {sidebarOpen && (
+              <SearchPanel
+                className="flex-grow min-h-0 h-full bg-white shadow-xl border-t md:border-0 overflow-y-auto md:overflow-hidden"
+                backend={backend}
+                search={search}
+                colorBy={colorBy}
+                colorHook={colorHook}
+                config={config}
+                selectedDetails={selectedDetails}
+                xType={xType}
+                setxType={setxType}
+                settings={settings}
+                treenomeState={treenomeState}
+                view={view}
+                overlayContent={overlayContent}
+                setAboutEnabled={setAboutEnabled}
+                perNodeFunctions={perNodeFunctions}
+                toggleSidebar={toggleSidebar}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>

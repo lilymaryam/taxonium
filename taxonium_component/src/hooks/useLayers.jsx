@@ -47,6 +47,7 @@ const useLayers = ({
   treenomeReferenceInfo,
   setTreenomeReferenceInfo,
   hoveredKey,
+  view,
 }) => {
   const lineColor = settings.lineColor;
   const getNodeColorField = colorBy.getNodeColorField;
@@ -156,34 +157,114 @@ const useLayers = ({
 
   const bound_contour = [[outer_bounds, inner_bounds]];
 
+  // Add a function to check if a node is part of the selected lineage or its sub-lineages
+  const isNodeInSelectedLineage = useCallback((node, selectedLineage, dataSource = detailed_data) => {
+    if (!selectedLineage || !node) return true; // If no lineage selected, show all nodes
+    
+    // Use the same accessor function (getNodeColorField) that is used for coloring
+    const nodeLineage = getNodeColorField(node, dataSource);
+    if (!nodeLineage) return false; // Node has no lineage information
+    
+    // Exact match - node is exactly the selected lineage
+    if (nodeLineage === selectedLineage) return true;
+    
+    // Check if node is in a sub-lineage of the selected lineage
+    // e.g., if AY is selected, we want to highlight AY.4, AY.4.2, etc.
+    if (nodeLineage.startsWith(selectedLineage + '.')) {
+      return true;
+    }
+    
+    return false;
+  }, [getNodeColorField, detailed_data]);
+
+  // Update the scatter layer common props to apply lineage filtering logic
   const scatter_layer_common_props = {
     getPosition: (d) => [getX(d), d.y],
-    getFillColor: (d) => toRGB(getNodeColorField(d, detailed_data)),
-    getRadius: settings.nodeSize,
-    // radius in pixels
-    // we had to get rid of the below because it was messing up the genotype colours
-    // getRadius: (d) =>
-    //  getNodeColorField(d, detailed_data) === hoveredKey ? 4 : 3,
-    getLineColor: [100, 100, 100],
+    getFillColor: (d) => {
+      // Cache node color for better performance
+      const nodeLineage = getNodeColorField(d, detailed_data);
+      
+      // If a category is selected (hoveredKey exists)
+      if (hoveredKey) {
+        // Instead of exact match, use the isNodeInSelectedLineage function
+        if (isNodeInSelectedLineage(d, hoveredKey, detailed_data)) {
+          // Make selected category nodes more vibrant
+          const baseColor = toRGB(nodeLineage);
+          return baseColor.map(c => Math.min(255, c + 40));
+        } else {
+          // Gray out nodes that don't belong to the selected category
+          return [180, 180, 180]; // Light gray color
+        }
+      }
+      
+      // No category selected, show normal colors
+      return toRGB(nodeLineage);
+    },
+    getRadius: (d) => {
+      // Only calculate node category when hoveredKey is present
+      if (hoveredKey) {
+        // Use isNodeInSelectedLineage instead of direct equality
+        if (isNodeInSelectedLineage(d, hoveredKey, detailed_data)) {
+          return settings.nodeSize * 1.5; // Make highlighted nodes 1.5x bigger
+        }
+      }
+      return settings.nodeSize;
+    },
+    getLineColor: (d) => {
+      // Only calculate when hoveredKey is present to improve performance
+      if (hoveredKey) {
+        // Use isNodeInSelectedLineage instead of direct equality
+        if (isNodeInSelectedLineage(d, hoveredKey, detailed_data)) {
+          return [0, 0, 0]; // Black outline for highlighted nodes
+        }
+        // Lighter gray outline for non-matching nodes when a category is selected
+        return [160, 160, 160];
+      }
+      return [100, 100, 100];
+    },
+    getLineWidth: (d) => {
+      // Only calculate when hoveredKey is present
+      if (hoveredKey) {
+        // Use isNodeInSelectedLineage instead of direct equality
+        if (isNodeInSelectedLineage(d, hoveredKey, detailed_data)) {
+          return 2;
+        }
+      }
+      return 1;
+    },
+    lineWidthScale: 1,
     opacity: settings.opacity,
     stroked: data.data.nodes && data.data.nodes.length < 3000,
     lineWidthUnits: "pixels",
-    lineWidthScale: 1,
     pickable: true,
     radiusUnits: "pixels",
     onHover: (info) => setHoverInfo(info),
     modelMatrix: modelMatrix,
     updateTriggers: {
-      getFillColor: [detailed_data, getNodeColorField, colorHook],
-      getRadius: [settings.nodeSize],
+      getFillColor: [detailed_data, getNodeColorField, colorHook, hoveredKey, view?.currentFilteredLineage],
+      getRadius: [settings.nodeSize, hoveredKey, view?.currentFilteredLineage],
+      getLineColor: [hoveredKey, view?.currentFilteredLineage],
+      getLineWidth: [hoveredKey, view?.currentFilteredLineage],
       getPosition: [xType],
     },
   };
 
+  // Also update line layer common props to use the same highlighting logic
   const line_layer_horiz_common_props = {
     getSourcePosition: (d) => [getX(d), d.y],
     getTargetPosition: (d) => [d.parent_x, d.y],
-    getColor: lineColor,
+    getColor: (d) => {
+      if (hoveredKey) {
+        // For fillin lines, we need to pass base_data instead of detailed_data
+        const dataSource = d.isBaseData ? base_data : detailed_data;
+        // Use isNodeInSelectedLineage instead of direct equality
+        if (isNodeInSelectedLineage(d, hoveredKey, dataSource)) {
+          return [100, 100, 100]; // Normal color for selected category
+        }
+        return [200, 200, 200]; // Light gray for non-matching nodes
+      }
+      return lineColor;
+    },
     pickable: true,
     widthUnits: "pixels",
     getWidth: (d) =>
@@ -201,6 +282,7 @@ const useLayers = ({
       getSourcePosition: [detailed_data, xType],
       getTargetPosition: [detailed_data, xType],
       getWidth: [hoverInfo, selectedDetails.nodeDetails],
+      getColor: [hoveredKey, lineColor, view?.currentFilteredLineage],
     },
   };
 
@@ -208,7 +290,18 @@ const useLayers = ({
     getSourcePosition: (d) => [d.parent_x, d.y],
     getTargetPosition: (d) => [d.parent_x, d.parent_y],
     onHover: (info) => setHoverInfo(info),
-    getColor: lineColor,
+    getColor: (d) => {
+      if (hoveredKey) {
+        // For fillin lines, we need to pass base_data instead of detailed_data
+        const dataSource = d.isBaseData ? base_data : detailed_data;
+        // Use isNodeInSelectedLineage instead of direct equality
+        if (isNodeInSelectedLineage(d, hoveredKey, dataSource)) {
+          return [100, 100, 100]; // Normal color for selected category
+        }
+        return [200, 200, 200]; // Light gray for non-matching nodes
+      }
+      return lineColor;
+    },
     pickable: true,
     getWidth: (d) =>
       d === (hoverInfo && hoverInfo.object)
@@ -222,8 +315,18 @@ const useLayers = ({
       getSourcePosition: [detailed_data, xType],
       getTargetPosition: [detailed_data, xType],
       getWidth: [hoverInfo, selectedDetails.nodeDetails],
+      getColor: [hoveredKey, lineColor, view?.currentFilteredLineage],
     },
   };
+
+  // Create a deep copy of the base_data nodes and add isBaseData property
+  const base_data_nodes_with_flag = useMemo(() => {
+    if (!base_data || !base_data.nodes) return [];
+    return base_data.nodes.map(node => ({
+      ...node,
+      isBaseData: true
+    }));
+  }, [base_data]);
 
   if (detailed_data.nodes) {
     const main_scatter_layer = {
@@ -246,8 +349,26 @@ const useLayers = ({
       layerType: "ScatterplotLayer",
       ...scatter_layer_common_props,
       id: "fillin-scatter",
-      data: minimap_scatter_data,
-      getFillColor: (d) => toRGB(getNodeColorField(d, base_data)),
+      data: minimap_scatter_data.map(node => ({ ...node, isBaseData: true })),
+      getFillColor: (d) => {
+        const nodeLineage = getNodeColorField(d, base_data);
+        
+        // If a category is selected (hoveredKey exists)
+        if (hoveredKey) {
+          // Instead of exact match, use the isNodeInSelectedLineage function
+          if (isNodeInSelectedLineage(d, hoveredKey, base_data)) {
+            // Make selected category nodes more vibrant
+            const baseColor = toRGB(nodeLineage);
+            return baseColor.map(c => Math.min(255, c + 40));
+          } else {
+            // Gray out nodes that don't belong to the selected category
+            return [180, 180, 180]; // Light gray color
+          }
+        }
+        
+        // No category selected, show normal colors
+        return toRGB(nodeLineage);
+      },
     };
 
     const main_line_layer = {
@@ -268,14 +389,14 @@ const useLayers = ({
       layerType: "LineLayer",
       ...line_layer_horiz_common_props,
       id: "fillin-line-horiz",
-      data: base_data.nodes,
+      data: base_data_nodes_with_flag,
     };
 
     const fillin_line_layer2 = {
       layerType: "LineLayer",
       ...line_layer_vert_common_props,
       id: "fillin-line-vert",
-      data: base_data.nodes,
+      data: base_data_nodes_with_flag,
     };
 
     const selectedLayer = {
@@ -395,19 +516,39 @@ const useLayers = ({
   const minimap_scatter = {
     layerType: "ScatterplotLayer",
     id: "minimap-scatter",
-    data: minimap_scatter_data,
+    data: minimap_scatter_data.map(node => ({ ...node, isBaseData: true })),
     getPolygonOffset: ({ layerIndex }) => [0, -4000],
     getPosition: (d) => [getX(d), d.y],
-    getFillColor: (d) => toRGB(getNodeColorField(d, base_data)),
+    getFillColor: (d) => {
+      const nodeLineage = getNodeColorField(d, base_data);
+      
+      // Add highlighting for selected lineage in minimap view
+      if (hoveredKey) {
+        if (isNodeInSelectedLineage(d, hoveredKey, base_data)) {
+          const baseColor = toRGB(nodeLineage);
+          return baseColor.map(c => Math.min(255, c + 40));
+        } else {
+          return [180, 180, 180]; // Gray color for non-matching
+        }
+      }
+      
+      return toRGB(nodeLineage);
+    },
     // radius in pixels
-    getRadius: 2,
+    getRadius: (d) => {
+      if (hoveredKey && isNodeInSelectedLineage(d, hoveredKey, base_data)) {
+        return 3; // Slightly larger radius for matching nodes
+      }
+      return 2;
+    },
     getLineColor: [100, 100, 100],
 
     opacity: 0.6,
     radiusUnits: "pixels",
     onHover: (info) => setHoverInfo(info),
     updateTriggers: {
-      getFillColor: [base_data, getNodeColorField],
+      getFillColor: [base_data, getNodeColorField, hoveredKey],
+      getRadius: [hoveredKey],
       getPosition: [minimap_scatter_data, xType],
     },
   };
@@ -416,13 +557,22 @@ const useLayers = ({
     layerType: "LineLayer",
     id: "minimap-line-horiz",
     getPolygonOffset: ({ layerIndex }) => [0, -4000],
-    data: base_data.nodes,
+    data: base_data_nodes_with_flag,
     getSourcePosition: (d) => [getX(d), d.y],
     getTargetPosition: (d) => [d.parent_x, d.y],
-    getColor: lineColor,
+    getColor: (d) => {
+      if (hoveredKey) {
+        if (isNodeInSelectedLineage(d, hoveredKey, base_data)) {
+          return [100, 100, 100];
+        }
+        return [220, 220, 220];
+      }
+      return lineColor;
+    },
     updateTriggers: {
       getSourcePosition: [base_data, xType],
       getTargetPosition: [base_data, xType],
+      getColor: [hoveredKey],
     },
   };
 
@@ -430,14 +580,22 @@ const useLayers = ({
     layerType: "LineLayer",
     id: "minimap-line-vert",
     getPolygonOffset: ({ layerIndex }) => [0, -4000],
-    data: base_data.nodes,
+    data: base_data_nodes_with_flag,
     getSourcePosition: (d) => [d.parent_x, d.y],
     getTargetPosition: (d) => [d.parent_x, d.parent_y],
-    getColor: lineColor,
-
+    getColor: (d) => {
+      if (hoveredKey) {
+        if (isNodeInSelectedLineage(d, hoveredKey, base_data)) {
+          return [100, 100, 100];
+        }
+        return [220, 220, 220];
+      }
+      return lineColor;
+    },
     updateTriggers: {
       getSourcePosition: [base_data, xType],
       getTargetPosition: [base_data, xType],
+      getColor: [hoveredKey],
     },
   };
 

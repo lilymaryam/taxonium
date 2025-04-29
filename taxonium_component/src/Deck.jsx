@@ -1,5 +1,5 @@
 /// app.js
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import DeckGL from "@deck.gl/react";
 import { View } from "@deck.gl/core";
 import useLayers from "./hooks/useLayers";
@@ -199,6 +199,35 @@ function Deck({
     hoveredKey,
   });
   // console.log("deck refresh");
+
+  // Find the useEffect that updates the view object with hoveredKey and keyStuff
+  useEffect(() => {
+    if (view) {
+      // Store references to the current keyStuff and setter functions
+      if (keyStuff) {
+        view.keyStuff = keyStuff;
+      }
+      
+      // Synchronize view's hoveredKey with local state
+      if (view.hoveredKey !== hoveredKey) {
+        view.hoveredKey = hoveredKey;
+      }
+      
+      // Create a stable setHoveredKey function that will persist
+      if (!view.setHoveredKey) {
+        view.setHoveredKey = (newKey) => {
+          setHoveredKey(newKey);
+        };
+      }
+    }
+  }, [view, keyStuff, hoveredKey]);
+
+  // Add another useEffect to respond to external changes to view.hoveredKey
+  useEffect(() => {
+    if (view && view.hoveredKey !== undefined && view.hoveredKey !== hoveredKey) {
+      setHoveredKey(view.hoveredKey);
+    }
+  }, [view?.hoveredKey]);
 
   return (
     <div
