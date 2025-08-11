@@ -43,7 +43,7 @@ const LineageTools = React.memo(({
   data,
   xType
 }) => {
-  const [sortedItems, setSortedItems] = useState([]);
+  //const [sortedItems, setSortedItems] = useState([]);
   const [viewMode, setViewMode] = useState(() => {
     try {
       const savedViewMode = localStorage.getItem('taxonium_lineage_view_mode');
@@ -52,7 +52,7 @@ const LineageTools = React.memo(({
       return "hierarchical";
     }
   });
-  const [hierarchyData, setHierarchyData] = useState([]);
+  //const [hierarchyData, setHierarchyData] = useState([]);
   const [expandedItems, setExpandedItems] = useState({});
   const [useHierarchicalColors, setUseHierarchicalColors] = useState(() => {
     try {
@@ -86,52 +86,30 @@ const LineageTools = React.memo(({
     lastProcessedLength: 0,
     processingTimestamp: 0
   });
+
+  const [autolinGenerated, setAutolinGenerated] = useState(false);
   
   // Add state for chart depth control
   const [maxChartDepth, setMaxChartDepth] = useState(3);
 
   // Process data with debouncing to prevent rapid updates
-  useEffect(() => {
-    // Skip if no data
-    if (!keyStuff) {
-      setIsLoading(false);
-      return;
+  
+  const { sortedItems, hierarchyData } = useMemo(() => {
+    if (!keyStuff || keyStuff.length === 0) {
+      //setIsLoading(false);
+      return { sortedItems: [], hierarchyData: [] };
     }
     
-    // Set loading state
-    setIsLoading(true);
+    //setIsLoading(true);
     
-    // Simple debounce to prevent UI blocking
-    const timer = setTimeout(() => {
-      try {
-        console.log("Processing lineage data, keyStuff length:", keyStuff.length);
-        
-        if (keyStuff.length > 0) {
-          // Create a stable copy of the data
-          const sorted = [...keyStuff].sort((a, b) => b.count - a.count);
-          
-          // Build hierarchy data
-          const hierarchy = organizeLineageHierarchy(keyStuff);
-          
-          // Update state with new data
-          setSortedItems(sorted);
-          setHierarchyData(hierarchy);
-          
-          console.log("Processed lineage data successfully:", sorted.length, "items");
-        } else {
-          // Clear data if empty
-          setSortedItems([]);
-          setHierarchyData([]);
-        }
-      } catch (error) {
-        console.error("Error processing lineage data:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    }, 100);
+    const sorted = [...keyStuff].sort((a, b) => b.count - a.count);
+    const hierarchy = organizeLineageHierarchy(keyStuff);
     
-    return () => clearTimeout(timer);
-  }, [keyStuff]);
+    //setIsLoading(false);
+    
+    return { sortedItems: sorted, hierarchyData: hierarchy };
+  }, [keyStuff?.length]); // Only recompute if length changes
+
   
   // Store expanded items in localStorage to persist between renders
   useEffect(() => {
@@ -676,10 +654,10 @@ const LineageTools = React.memo(({
           Lineages
         </button>
         <button 
-          className={`flex-1 py-2 px-4 text-sm font-medium ${activeTab === 'stats' ? 'text-blue-600 border-b-2 border-blue-500' : 'text-gray-500'}`}
-          onClick={() => setActiveTab('stats')}
+          className={`flex-1 py-2 px-4 text-sm font-medium ${activeTab === 'autolin' ? 'text-blue-600 border-b-2 border-blue-500' : 'text-gray-500'}`}
+          onClick={() => setActiveTab('autolin')}
         >
-          Statistics
+          AutoLineage
         </button>
       </div>
       
@@ -888,9 +866,28 @@ const LineageTools = React.memo(({
         </div>
       )}
       
-      {activeTab === 'stats' && (
+      {activeTab ==='autolin' && (
         <div className="p-4 flex flex-col h-full overflow-auto">
-          <h3 className="text-sm font-medium mb-2">Lineage Evolution</h3>
+          <h3 className="text-sm font-medium mb-2">Automated Lineage Designation</h3>
+          <div className="mb-3">
+            <button 
+              className={`w-full text-xs py-2 px-3 border rounded focus:outline-none ${
+                  autolinGenerated 
+                    ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' 
+                    : 'hover:bg-gray-50'
+                }`}           
+              onClick={() => {
+                // Add your button functionality here
+                setAutolinGenerated(true);
+                console.log("Generating AutoLin Designations...");
+              }}
+            >
+              Generate Autolin Designations
+            </button>
+          </div>
+  
+          
+          
           {isLoading ? (
             <div className="text-center py-4 text-gray-500">
               Loading lineage statistics...
@@ -911,8 +908,9 @@ const LineageTools = React.memo(({
                 </p>
               </div>
               
+              
               {/* Show time chart if enabled */}
-              {showTimeChart && (
+              {/*{showTimeChart && (
                 <div className="lineage-time-chart-container">
                   {console.log("Rendering LineageTimeChart with:", { 
                     hasData: !!data, 
@@ -928,6 +926,7 @@ const LineageTools = React.memo(({
                   />
                 </div>
               )}
+            */}
               
               {/* Controls for the chart */}
               <div className="mt-4 border-t pt-3">
