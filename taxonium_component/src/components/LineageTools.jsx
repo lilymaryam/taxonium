@@ -10,6 +10,8 @@ import {
   extractLineageRoot
 } from "../utils/lineageUtils";
 import LineageTimeChart from "./LineageTimeChart";
+import { analyzeAutolin } from "../utils/autoLineage";
+
 
 // Create a deep comparator for memoization to avoid unnecessary re-renders
 const arePropsEqual = (prevProps, nextProps) => {
@@ -880,6 +882,8 @@ const LineageTools = React.memo(({
                 // Add your button functionality here
                 setAutolinGenerated(true);
                 console.log("Generating AutoLin Designations...");
+                analyzeAutolin(data, keyStuff);
+
               }}
             >
               Generate Autolin Designations
@@ -894,7 +898,6 @@ const LineageTools = React.memo(({
             </div>
           ) : (
             <>
-              {/* Show basic stats at the top */}
               <div className="text-xs text-gray-700 mb-4">
                 <p>
                   Total Lineages: <strong>{keyStuff?.length || 0}</strong>
@@ -909,47 +912,8 @@ const LineageTools = React.memo(({
               </div>
               
               
-              {/* Show time chart if enabled */}
-              {/*{showTimeChart && (
-                <div className="lineage-time-chart-container">
-                  {console.log("Rendering LineageTimeChart with:", { 
-                    hasData: !!data, 
-                    hasHierarchyData: !!hierarchyData,
-                    selectedLineage
-                  })}
-                  <LineageTimeChart
-                    data={data}
-                    hierarchyData={hierarchyData}
-                    xType={xType || 'x_dist'}
-                    selectedCategory={selectedLineage}
-                    getLineageColor={getColorForLineage}
-                  />
-                </div>
-              )}
-            */}
               
-              {/* Controls for the chart */}
-              <div className="mt-4 border-t pt-3">
-                <div className="flex items-center justify-between text-xs mb-2">
-                  <label htmlFor="max-depth">Maximum Depth:</label>
-                  <div>
-                    <input 
-                      id="max-depth"
-                      type="range" 
-                      min="1" 
-                      max="5"
-                      value={maxChartDepth}
-                      onChange={(e) => setMaxChartDepth(parseInt(e.target.value, 10))}
-                      className="w-24"
-                    />
-                    <span className="ml-2">{maxChartDepth}</span>
-                  </div>
-                </div>
-                
-                <div className="text-xs text-gray-500">
-                  Switch between time views using the main time control at the top of the app
-                </div>
-              </div>
+              
             </>
           )}
         </div>
